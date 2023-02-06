@@ -9,9 +9,8 @@ on:
 jobs:
 
   build: 
-
-    steps: 
-    runs-on: ubuntu-latest
+  runs-on: ubuntu-latest
+    steps:
     - uses: actions/checkout@v3
     - name: Build the Docker image
       run: npm run create-dockerfile
