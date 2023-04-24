@@ -16,7 +16,10 @@
                                                __/ |                                                                    
                                               |___/                                                                     
 */
-import { App } from './app.js'
+
+if(['netlify.app', 'vercel.app', 'github.io', 'gitlab.io', 'pages.dev'].includes(window.location.hostname)) throw alert(`You cannot deploy to ${window.location.hostname}. Did you read the notice before deploying?`);
+
+import { App } from './app.js';
 import { gs } from './gs.js';
 import { apps } from './apps.js';
 import { access } from './home.js';
@@ -26,6 +29,35 @@ import { community } from './community.js';
 
 window.app = new App();
 
+app.bare = new Ultraviolet.BareClient(new URL(__uv$config.bare, window.location));
+
+// You can add more search engines if you want
+app.searchProviders = {
+    google: {
+        mapQuery: (query) => `http://google.com/complete/search?q=${query}&client=${(["Chrome", "Firefox", "Safari"].filter(c => navigator.userAgent.includes(c))[0] || "Chrome").toLowerCase()}`,
+        parseResponse: (res) => JSON.parse(res)[1]
+    },
+    ddg: {
+        mapQuery: (query) => `https://duckduckgo.com/ac/?q=${encodeURIComponent(query)}`,
+        parseResponse: (res) => JSON.parse(res).map(ac => ac.phrase)
+    },
+    bing: {
+        mapQuery: (query) => `https://www.bing.com/AS/Suggestions?qry=${encodeURIComponent(query)}&cvid=%01&bareServer=`,
+        parseResponse: (res) => ([...res.matchAll(/<span class="sa_tm_text">(.*?)<\/span>/g)]).map(phrase => phrase[1].replace(/<strong>|<\/strong>/g, ''))
+    },
+    brave: {
+        mapQuery: (query) => `https://search.brave.com/api/suggest?q=${encodeURIComponent(query)}`,
+        parseResponse: (res) => JSON.parse(res)[1]
+    },
+    startpage: {
+        mapQuery: (query) => `https://www.startpage.com/suggestions?q=${encodeURIComponent(query)}&segment=omnibox`,
+        parseResponse: (res) => JSON.parse(res).suggestions.map(ac => ac.text)
+    },
+    ecosia: {
+        mapQuery: (query) => `https://ac.ecosia.org/?q=${encodeURIComponent(query)}`,
+        parseResponse: (res) => JSON.parse(res).suggestions
+    }
+};
 
 switch(localStorage.getItem('incog||background')) {
     case 'stars':
@@ -172,9 +204,9 @@ document.querySelector('.access-link').addEventListener('click', () => {
     const frame = document.querySelector('.access-frame');
     const win = frame.contentWindow;
     
-    if (win.__uv) {
+    if (win.__uv$location) {
         navigator.clipboard.writeText(
-            new URL('./?link=' + encodeURIComponent(btoa(win.__uv.location.href)), location.href).href
+            new URL('./?link=' + encodeURIComponent(btoa(win.__uv$location.href)), location.href).href
         );
     };
 
@@ -189,14 +221,15 @@ document.querySelector('.access-panel').addEventListener('mouseenter', async eve
     const frame = document.querySelector('.access-frame');
     const win = frame.contentWindow;
 
+    const { bare } = app;
+
     if (win && win.__uv) {
         document.querySelector('.access-panel .controls input').value = Object.getOwnPropertyDescriptor(Document.prototype, 'title').get.call(win.document);
         const favi = document.querySelector.call(win.document, 'link[rel=icon]');
 
         if (favi && Object.getOwnPropertyDescriptor(HTMLLinkElement.prototype, 'href').get.call(favi)) {
-            const res = await win.__uv.client.fetch.fetch.call(
-                win,
-                Object.getOwnPropertyDescriptor(HTMLLinkElement.prototype, 'href').get.call(favi)
+            const res = await bare.fetch(
+                __uv$config.decodeUrl(Object.getOwnPropertyDescriptor(HTMLLinkElement.prototype, 'href').get.call(favi).replace(new URL(__uv$config.prefix, window.location.origin), ""))
             );
 
             const blob = await res.blob();
@@ -205,12 +238,7 @@ document.querySelector('.access-panel').addEventListener('mouseenter', async eve
             document.querySelector('.access-panel .controls .icon').src = url;
             URL.revokeObjectURL(url);
         } else {
-            const res = await win.__uv.client.fetch.fetch.call(
-                win,
-                win.__uv.rewriteUrl(
-                    '/favicon.ico'
-                )
-            );
+            const res = await bare.fetch(new URL('/favicon.ico', win.__uv$location.origin));
 
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
